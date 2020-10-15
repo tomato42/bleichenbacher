@@ -1,7 +1,6 @@
 from TypeChecking.Annotations import typecheck
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_v1_5
 
+from tlslite.utils.keyfactory import generateRSAKey
 
 class Oracle():
     """
@@ -13,10 +12,9 @@ class Oracle():
         """
         Setup keys, secret message and encryption/decryption schemes.
         """
-        self._key = RSA.generate(1024)
-        self._pkcs = PKCS1_v1_5.new(self._key)
+        self._key = generateRSAKey(1024)
         self._secret = b'This is how Daniel Bleichenbachers adaptive chosen-ciphertext attack works...'
-        self._pkcsmsg = self._pkcs.encrypt(self._secret)
+        self._pkcsmsg = bytes(self._key.encrypt(self._secret))
 
     @typecheck
     def get_n(self) -> int:
@@ -37,7 +35,7 @@ class Oracle():
         """
         Returns the length of the RSA modulus in bytes.
         """
-        return (self._key.size() + 1) // 8
+        return (int(self.get_n()).bit_length() + 7) // 8
 
     @typecheck
     def eavesdrop(self) -> bytes:
@@ -58,13 +56,14 @@ class Oracle():
             raise ValueError("Ciphertext with incorrect length.")
 
         # Step 2a (OS2IP), 2b (RSADP), and part of 2c (I2OSP)
-        m = self._key.decrypt(ciphertext)
+        m = self._key._rawPrivateKeyOp(int.from_bytes(ciphertext, "big"))
 
         # Complete step 2c (I2OSP)
-        em = b"\x00" * (self.get_k() - len(m)) + m
+        #em = b"\x00" * (self.get_k() - len(m)) + m
+        em = m.to_bytes(self.get_k(), "big")
 
         # Step 3 (modified)
-        sep = em.find(b"\x00", 2)
+        #sep = em.find(b"\x00", 2)
 
         # TODO: Justify oracle strength... --> for testing purposes
 
